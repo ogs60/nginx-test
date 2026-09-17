@@ -91,7 +91,7 @@ jobs:
 # ==========================================================
 
   deploy:
-    name: Deploy Kubernetes
+    name: Deploy K3s
     runs-on:
       - self-hosted
       - linux
@@ -127,36 +127,63 @@ jobs:
 
       - name: Apply Kubernetes
         run: |
-          kubectl apply -f k8s/
+          docker run --rm \
+            --network host \
+            -e KUBECONFIG=/root/.kube/config \
+            -v /root/.kube/config:/root/.kube/config:ro \
+            -v "$GITHUB_WORKSPACE:/workspace" \
+            -w /workspace \
+            bitnami/kubectl:latest \
+            apply -f k8s/
 
       - name: Rollout Status
         run: |
-          kubectl rollout status \
-          deployment/nginx-test \
-          --timeout=180s
+          docker run --rm \
+            --network host \
+            -e KUBECONFIG=/root/.kube/config \
+            -v /root/.kube/config:/root/.kube/config:ro \
+            bitnami/kubectl:latest \
+            rollout status \
+            deployment/nginx-test \
+            --timeout=180s
 
       - name: Verify Deployment
         run: |
           echo "========================"
           echo "Deployment"
           echo "========================"
-          kubectl get deployment nginx-test
+          docker run --rm \
+            --network host \
+            -e KUBECONFIG=/root/.kube/config \
+            -v /root/.kube/config:/root/.kube/config:ro \
+            bitnami/kubectl:latest \
+            get deployment nginx-test
 
           echo ""
           echo "========================"
           echo "Pods"
           echo "========================"
 
-          kubectl get pods \
-          -l app=nginx-test \
-          -o wide
+          docker run --rm \
+            --network host \
+            -e KUBECONFIG=/root/.kube/config \
+            -v /root/.kube/config:/root/.kube/config:ro \
+            bitnami/kubectl:latest \
+            get pods \
+            -l app=nginx-test \
+            -o wide
 
           echo ""
           echo "========================"
           echo "Current Image"
           echo "========================"
 
-          kubectl get deployment nginx-test \
-          -o jsonpath='{.spec.template.spec.containers[0].image}'
+          docker run --rm \
+            --network host \
+            -e KUBECONFIG=/root/.kube/config \
+            -v /root/.kube/config:/root/.kube/config:ro \
+            bitnami/kubectl:latest \
+            get deployment nginx-test \
+            -o jsonpath='{.spec.template.spec.containers[0].image}'
 
           echo
