@@ -63,6 +63,16 @@ jobs:
           TAG=$(git rev-parse --short HEAD)
           echo "tag=$TAG" >> $GITHUB_OUTPUT
           echo "IMAGE TAG=$TAG"
+      
+      - name: Test Harbor Login
+        run: |
+          echo "Harbor URL=${{ vars.HARBOR_URL }}"
+          echo "Username=${{ secrets.HARBOR_USERNAME }}"
+          echo "${{ secrets.HARBOR_PASSWORD }}" | \
+          docker login \
+          "${{ vars.HARBOR_URL }}" \
+          -u "${{ secrets.HARBOR_USERNAME }}" \
+          --password-stdin
 
       - name: Login Harbor
         run: |
