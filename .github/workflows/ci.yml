@@ -1,0 +1,240 @@
+name: nginx-test CI/CD
+
+on:
+  push:
+    branches:
+      - master
+
+  workflow_dispatch:
+
+
+env:
+  IMAGE_NAME: harbor.azhuan.ren/sre_uat/nginx-test
+  KUBECONFIG: /root/.kube/config
+
+
+jobs:
+
+  # =========================================================
+  # SonarQube
+  # =========================================================
+
+  sonar:
+    name: SonarQube
+    runs-on: [self-hosted, linux, docker]
+
+    steps:
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+
+      - name: SonarQube Scan
+        uses: SonarSource/sonarqube-scan-action@v7
+        env:
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+
+  # =========================================================
+  # Build & Push Harbor
+  # =========================================================
+
+  build:
+    name: Build & Push
+    runs-on: [self-hosted, linux, docker]
+
+    needs:
+      - sonar
+
+    outputs:
+      image_tag: ${{ steps.version.outputs.hash }}
+
+    steps:
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+
+      # -----------------------------------------------------
+      # 获取 Git Short SHA
+      # -----------------------------------------------------
+
+      - name: Get Git SHA
+        id: version
+        run: |
+
+          HASH=$(git rev-parse --short HEAD)
+
+          echo "hash=$HASH" >> "$GITHUB_OUTPUT"
+
+          echo "Build version: $HASH"
+
+
+      # -----------------------------------------------------
+      # 登录 Harbor
+      # -----------------------------------------------------
+
+      - name: Login Harbor
+        run: |
+
+          echo "${{ secrets.HARBOR_PASSWORD }}" | \
+          docker login harbor.azhuan.ren \
+            -u "${{ secrets.HARBOR_USERNAME }}" \
+            --password-stdin
+
+
+      # -----------------------------------------------------
+      # Docker Build
+      # -----------------------------------------------------
+
+      - name: Docker Build
+        run: |
+
+          docker build \
+            --build-arg BUILD_HASH=${{ steps.version.outputs.hash }} \
+            -t $IMAGE_NAME:${{ steps.version.outputs.hash }} \
+            .
+
+
+      # -----------------------------------------------------
+      # Push Harbor
+      # -----------------------------------------------------
+
+      - name: Push Harbor
+        run: |
+
+          docker push \
+            $IMAGE_NAME:${{ steps.version.outputs.hash }}
+
+
+  # =========================================================
+  # Kubernetes Deploy
+  # =========================================================
+
+  deploy:
+    name: Deploy Kubernetes
+    runs-on: [self-hosted, linux, docker]
+
+    needs:
+      - build
+
+    steps:
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+
+      # -----------------------------------------------------
+      # 获取 Git Short SHA
+      # -----------------------------------------------------
+
+      - name: Get Git SHA
+        id: version
+        run: |
+
+          HASH=$(git rev-parse --short HEAD)
+
+          echo "IMAGE_TAG=$HASH" >> "$GITHUB_ENV"
+
+          echo "Deploy version: $HASH"
+
+
+      # -----------------------------------------------------
+      # 修改 Kubernetes Deployment 镜像
+      # -----------------------------------------------------
+
+      - name: Update Kubernetes Image
+        run: |
+
+          sed -i \
+            "s#image: harbor.azhuan.ren/sre_uat/nginx-test:.*#image: harbor.azhuan.ren/sre_uat/nginx-test:${IMAGE_TAG}#" \
+            k8s/deployment.yaml
+
+
+      # -----------------------------------------------------
+      # 查看最终 Kubernetes YAML
+      # -----------------------------------------------------
+
+      - name: Show Kubernetes YAML
+        run: |
+
+          echo "=============================="
+          echo "Kubernetes Deployment"
+          echo "=============================="
+
+          cat k8s/deployment.yaml
+
+
+      # -----------------------------------------------------
+      # 部署 Kubernetes
+      # -----------------------------------------------------
+
+      - name: Apply Kubernetes
+        run: |
+
+          kubectl apply -f k8s/
+
+
+      # -----------------------------------------------------
+      # 等待 Deployment 完成
+      # -----------------------------------------------------
+
+      - name: Rollout Status
+        run: |
+
+          kubectl rollout status \
+            deployment/nginx-test \
+            --namespace default \
+            --timeout=180s
+
+
+      # -----------------------------------------------------
+      # 查看最终状态
+      # -----------------------------------------------------
+
+      - name: Kubernetes Status
+        run: |
+
+          echo "=============================="
+          echo "Deployment"
+          echo "=============================="
+
+          kubectl get deployment nginx-test -o wide
+
+
+          echo ""
+          echo "=============================="
+          echo "Service"
+          echo "=============================="
+
+          kubectl get service nginx-test
+
+
+          echo ""
+          echo "=============================="
+          echo "Ingress"
+          echo "=============================="
+
+          kubectl get ingress nginx-test
+
+
+          echo ""
+          echo "=============================="
+          echo "Pods"
+          echo "=============================="
+
+          kubectl get pods \
+            -l app=nginx-test \
+            -o wide
+
+
+          echo ""
+          echo "=============================="
+          echo "Image"
+          echo "=============================="
+
+          kubectl get deployment nginx-test \
+            -o jsonpath='{.spec.template.spec.containers[0].image}'

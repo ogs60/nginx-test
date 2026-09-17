@@ -1,0 +1,182 @@
+name: Nginx CI/CD
+on:
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+env:
+  IMAGE_NAME: harbor.azhuan.ren/sre_uat/xbb-nginx
+  KUBECONFIG: /root/.kube/config
+
+jobs:
+
+  # =========================================================
+  # 1. SonarQube
+  # =========================================================
+  sonar:
+    name: SonarQube
+    runs-on: [self-hosted, linux, docker]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: SonarQube Scan
+        uses: SonarSource/sonarqube-scan-action@v7
+        env:
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+  # =========================================================
+  # 2. Docker Build + Harbor
+  # =========================================================
+
+  build:
+    name: Build & Push
+    runs-on: [self-hosted, linux, docker]
+
+    needs:
+      - sonar
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      # -----------------------------------------------------
+      # 获取 Git Short SHA
+      # -----------------------------------------------------
+      - name: Get Git SHA
+        id: version
+        run: |
+          HASH=$(git rev-parse --short HEAD)
+          echo "hash=$HASH" >> "$GITHUB_OUTPUT"
+          echo "Build version: $HASH"
+
+      # -----------------------------------------------------
+      # 登录 Harbor
+      # -----------------------------------------------------
+      - name: Login Harbor
+        run: |
+          echo "${{ secrets.HARBOR_PASSWORD }}" | \
+          docker login harbor.azhuan.ren \
+            -u "${{ secrets.HARBOR_USERNAME }}" \
+            --password-stdin
+
+      # -----------------------------------------------------
+      # Build
+      # -----------------------------------------------------
+      - name: Docker Build
+        run: |
+          docker build \
+            --build-arg BUILD_HASH=${{ steps.version.outputs.hash }} \
+            -t $IMAGE_NAME:${{ steps.version.outputs.hash }} \
+            -t $IMAGE_NAME:latest \
+            .
+      # -----------------------------------------------------
+      # Push
+      # -----------------------------------------------------
+
+      - name: Push Image
+        run: |
+
+          docker push \
+            $IMAGE_NAME:${{ steps.version.outputs.hash }}
+
+          docker push \
+            $IMAGE_NAME:latest
+
+
+  # =========================================================
+  # 3. Deploy K3s
+  # =========================================================
+
+  deploy:
+    name: Deploy K3s
+    runs-on: [self-hosted, linux, docker]
+
+    needs:
+      - build
+
+    steps:
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+
+      # -----------------------------------------------------
+      # 获取 Git Short SHA
+      # -----------------------------------------------------
+
+      - name: Get Git SHA
+        id: version
+        run: |
+
+          HASH=$(git rev-parse --short HEAD)
+
+          echo "hash=$HASH" >> "$GITHUB_OUTPUT"
+
+          echo "Deploy version: $HASH"
+
+
+      # -----------------------------------------------------
+      # 更新 Deployment
+      # -----------------------------------------------------
+
+      - name: Deploy
+        run: |
+
+          kubectl set image \
+            deployment/xbb-nginx-v5 \
+            nginx=$IMAGE_NAME:${{ steps.version.outputs.hash }} \
+            --namespace default
+
+      # -----------------------------------------------------
+      # 等待滚动更新完成
+      # -----------------------------------------------------
+
+      - name: Wait for rollout
+        run: |
+
+          kubectl rollout status \
+            deployment/xbb-nginx-v5 \
+            --namespace default \
+            --timeout=180s
+
+
+      # -----------------------------------------------------
+      # 查看部署结果
+      # -----------------------------------------------------
+
+      - name: Deployment Info
+        run: |
+
+          echo "=============================="
+          echo "Deployment"
+          echo "=============================="
+
+          kubectl get deployment \
+            xbb-nginx-v5 \
+            -n default
+
+
+          echo ""
+          echo "=============================="
+          echo "Pods"
+          echo "=============================="
+
+          kubectl get pods \
+            -l app=xbb-nginx \
+            -n default \
+            -o wide
+
+
+          echo ""
+          echo "=============================="
+          echo "Image"
+          echo "=============================="
+
+          kubectl get deployment \
+            xbb-nginx-v5 \
+            -n default \
+            -o jsonpath='{.spec.template.spec.containers[0].image}'
+
+          echo
