@@ -3,6 +3,9 @@ FROM openresty/openresty:alpine
 
 ARG BUILD_HASH=unknown
 
+RUN apk add --no-cache tzdata
+
+ENV TZ=Asia/Shanghai
 ENV BUILD_HASH=${BUILD_HASH}
 
 COPY nginx.conf /etc/nginx/conf.d/default.conf
