@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 
 
 START=$(date "+%Y-%m-%d %H:%M:%S")
