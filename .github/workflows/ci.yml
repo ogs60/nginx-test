@@ -1,240 +1,160 @@
 name: nginx-test CI/CD
-
 on:
   push:
     branches:
       - master
 
   workflow_dispatch:
-
-
 env:
-  IMAGE_NAME: harbor.azhuan.ren/sre_uat/nginx-test
+  IMAGE_NAME: ${{ vars.HARBOR_URL }}/${{ vars.HARBOR_PROJECT }}/nginx-test
   KUBECONFIG: /root/.kube/config
-
 
 jobs:
 
-  # =========================================================
-  # SonarQube
-  # =========================================================
-
+# ==========================================================
+# SonarQube Code Scan
+# ==========================================================
   sonar:
-    name: SonarQube
-    runs-on: [self-hosted, linux, docker]
+    name: SonarQube Scan
+    runs-on:
+      - self-hosted
+      - linux
+      - docker
+
+    environment:
+      name: dev
 
     steps:
-
-      - name: Checkout
+      - name: Checkout Code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
-
       - name: SonarQube Scan
         uses: SonarSource/sonarqube-scan-action@v7
         env:
-          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+          SONAR_HOST_URL: ${{ vars.SONAR_HOST_URL }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
-
-  # =========================================================
-  # Build & Push Harbor
-  # =========================================================
+# ==========================================================
+# Build Docker Image
+# Push Harbor
+# ==========================================================
 
   build:
-    name: Build & Push
-    runs-on: [self-hosted, linux, docker]
-
+    name: Build And Push Image
+    runs-on:
+      - self-hosted
+      - linux
+      - docker
+    environment:
+      name: dev
     needs:
       - sonar
-
     outputs:
-      image_tag: ${{ steps.version.outputs.hash }}
+      image_tag: ${{ steps.version.outputs.tag }}
 
     steps:
-
-      - name: Checkout
+      - name: Checkout Code
         uses: actions/checkout@v4
 
-
-      # -----------------------------------------------------
-      # 获取 Git Short SHA
-      # -----------------------------------------------------
-
-      - name: Get Git SHA
+      - name: Generate Image Tag
         id: version
         run: |
-
-          HASH=$(git rev-parse --short HEAD)
-
-          echo "hash=$HASH" >> "$GITHUB_OUTPUT"
-
-          echo "Build version: $HASH"
-
-
-      # -----------------------------------------------------
-      # 登录 Harbor
-      # -----------------------------------------------------
+          TAG=$(git rev-parse --short HEAD)
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "IMAGE TAG=$TAG"
 
       - name: Login Harbor
         run: |
-
           echo "${{ secrets.HARBOR_PASSWORD }}" | \
-          docker login harbor.azhuan.ren \
-            -u "${{ secrets.HARBOR_USERNAME }}" \
-            --password-stdin
-
-
-      # -----------------------------------------------------
-      # Docker Build
-      # -----------------------------------------------------
+          docker login \
+          "${{ vars.HARBOR_URL }}" \
+          -u "${{ secrets.HARBOR_USERNAME }}" \
+          --password-stdin
 
       - name: Docker Build
         run: |
-
           docker build \
-            --build-arg BUILD_HASH=${{ steps.version.outputs.hash }} \
-            -t $IMAGE_NAME:${{ steps.version.outputs.hash }} \
-            .
-
-
-      # -----------------------------------------------------
-      # Push Harbor
-      # -----------------------------------------------------
+          --build-arg BUILD_HASH=${{ steps.version.outputs.tag }} \
+          -t $IMAGE_NAME:${{ steps.version.outputs.tag }} \
+          .
 
       - name: Push Harbor
         run: |
-
           docker push \
-            $IMAGE_NAME:${{ steps.version.outputs.hash }}
+          $IMAGE_NAME:${{ steps.version.outputs.tag }}
 
-
-  # =========================================================
-  # Kubernetes Deploy
-  # =========================================================
+# ==========================================================
+# K3s Deploy
+# ==========================================================
 
   deploy:
     name: Deploy Kubernetes
-    runs-on: [self-hosted, linux, docker]
+    runs-on:
+      - self-hosted
+      - linux
+      - docker
 
+    environment:
+      name: dev
     needs:
       - build
 
     steps:
-
-      - name: Checkout
+      - name: Checkout Code
         uses: actions/checkout@v4
 
-
-      # -----------------------------------------------------
-      # 获取 Git Short SHA
-      # -----------------------------------------------------
-
-      - name: Get Git SHA
-        id: version
+      - name: Generate Image Tag
         run: |
+          TAG=$(git rev-parse --short HEAD)
+          echo "IMAGE_TAG=$TAG" >> $GITHUB_ENV
 
-          HASH=$(git rev-parse --short HEAD)
-
-          echo "IMAGE_TAG=$HASH" >> "$GITHUB_ENV"
-
-          echo "Deploy version: $HASH"
-
-
-      # -----------------------------------------------------
-      # 修改 Kubernetes Deployment 镜像
-      # -----------------------------------------------------
+      # 修改 deployment 镜像
 
       - name: Update Kubernetes Image
         run: |
-
           sed -i \
-            "s#image: harbor.azhuan.ren/sre_uat/nginx-test:.*#image: harbor.azhuan.ren/sre_uat/nginx-test:${IMAGE_TAG}#" \
-            k8s/deployment.yaml
-
-
-      # -----------------------------------------------------
-      # 查看最终 Kubernetes YAML
-      # -----------------------------------------------------
+          "s#image: .*nginx-test:.*#image: $IMAGE_NAME:$IMAGE_TAG#" \
+          k8s/deployment.yaml
 
       - name: Show Kubernetes YAML
         run: |
-
-          echo "=============================="
-          echo "Kubernetes Deployment"
-          echo "=============================="
-
           cat k8s/deployment.yaml
 
-
-      # -----------------------------------------------------
-      # 部署 Kubernetes
-      # -----------------------------------------------------
+      # 发布 k8s
 
       - name: Apply Kubernetes
         run: |
-
           kubectl apply -f k8s/
-
-
-      # -----------------------------------------------------
-      # 等待 Deployment 完成
-      # -----------------------------------------------------
 
       - name: Rollout Status
         run: |
-
           kubectl rollout status \
-            deployment/nginx-test \
-            --namespace default \
-            --timeout=180s
+          deployment/nginx-test \
+          --timeout=180s
 
-
-      # -----------------------------------------------------
-      # 查看最终状态
-      # -----------------------------------------------------
-
-      - name: Kubernetes Status
+      - name: Verify Deployment
         run: |
-
-          echo "=============================="
+          echo "========================"
           echo "Deployment"
-          echo "=============================="
-
-          kubectl get deployment nginx-test -o wide
-
+          echo "========================"
+          kubectl get deployment nginx-test
 
           echo ""
-          echo "=============================="
-          echo "Service"
-          echo "=============================="
-
-          kubectl get service nginx-test
-
-
-          echo ""
-          echo "=============================="
-          echo "Ingress"
-          echo "=============================="
-
-          kubectl get ingress nginx-test
-
-
-          echo ""
-          echo "=============================="
+          echo "========================"
           echo "Pods"
-          echo "=============================="
+          echo "========================"
 
           kubectl get pods \
-            -l app=nginx-test \
-            -o wide
-
+          -l app=nginx-test \
+          -o wide
 
           echo ""
-          echo "=============================="
-          echo "Image"
-          echo "=============================="
+          echo "========================"
+          echo "Current Image"
+          echo "========================"
 
           kubectl get deployment nginx-test \
-            -o jsonpath='{.spec.template.spec.containers[0].image}'
+          -o jsonpath='{.spec.template.spec.containers[0].image}'
+
+          echo
