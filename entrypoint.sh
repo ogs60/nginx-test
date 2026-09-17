@@ -1,7 +1,7 @@
 #!/bin/sh
 
 
-START=$(date "+%Y-%m-%d %H:%M:%S")
+START=$(date "+%Y-%m-%dT%H:%M:%S+08:00")
 
 
 cat > /usr/share/nginx/html/version.json <<EOF
@@ -14,6 +14,7 @@ EOF
 
 
 touch /tmp/count
+chmod 666 /tmp/count
 
 
 nginx -g "daemon off;"
