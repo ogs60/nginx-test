@@ -73,7 +73,7 @@ async function load(){
 
 
     document.getElementById("start").innerHTML =
-        v.start_time;
+        v.start_time.replace("T", " ").replace(/[+-]08:00$/, "");
 
 
     let now=new Date();
@@ -95,16 +95,16 @@ async function load(){
 
 
 
-    let c=await fetch("/count")
-        .then(r=>r.text());
-
-
-    document.getElementById("count").innerHTML=c;
-
 }
 
 
 load();
+
+fetch("/count")
+    .then(r=>r.text())
+    .then(c=>{
+        document.getElementById("count").innerHTML=c;
+    });
 
 setInterval(load,1000);
 
