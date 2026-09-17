@@ -128,14 +128,13 @@ jobs:
       - name: Apply Kubernetes
         run: |
           test -d k8s
-          docker run --rm \
+          set -o pipefail
+          cat k8s/*.yaml | docker run --rm -i \
             --network host \
             -e KUBECONFIG=/root/.kube/config \
             -v /root/.kube/config:/root/.kube/config:ro \
-            -v "$PWD:/workspace" \
-            -w /workspace \
             bitnami/kubectl:latest \
-            apply -f k8s/
+            apply -f -
 
       - name: Rollout Status
         run: |
