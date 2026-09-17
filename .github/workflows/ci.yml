@@ -67,7 +67,7 @@ jobs:
 
       - name: Login Harbor
         env:
-          HARBOR_USER: ${{ secrets.HARBOR_USER }}
+          HARBOR_USER: ${{ secrets.HARBOR_USERNAME }}
           HARBOR_PASSWORD: ${{ secrets.HARBOR_PASSWORD }}
         run: |
           docker logout harbor.azhuan.ren || true
