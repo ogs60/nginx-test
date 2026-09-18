@@ -113,11 +113,12 @@ jobs:
 
       - name: Helm Upgrade And Install
         run: |
+          test -d helm/nginx-test
           docker run --rm \
             --network host \
             -e KUBECONFIG=/root/.kube/config \
             -v /root/.kube/config:/root/.kube/config:ro \
-            -v "$GITHUB_WORKSPACE":/workspace \
+            -v "$PWD":/workspace \
             -w /workspace \
             alpine/helm:3.19.0 \
             upgrade --install nginx-test ./helm/nginx-test \
