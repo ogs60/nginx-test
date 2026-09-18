@@ -133,6 +133,7 @@ jobs:
             bitnami/kubectl:latest \
             rollout status \
             deployment/nginx-test \
+            --namespace default \
             --timeout=180s
 
       - name: Verify Deployment
@@ -142,7 +143,8 @@ jobs:
             -e KUBECONFIG=/root/.kube/config \
             -v /root/.kube/config:/root/.kube/config:ro \
             bitnami/kubectl:latest \
-            get deployment nginx-test
+            get deployment nginx-test \
+            --namespace default
 
           echo ""
           echo "========================"
@@ -156,7 +158,8 @@ jobs:
             bitnami/kubectl:latest \
             get pods \
             -l app=nginx-test \
-            -o wide
+            -o wide \
+            --namespace default
 
           echo ""
           echo "========================"
@@ -169,6 +172,7 @@ jobs:
             -v /root/.kube/config:/root/.kube/config:ro \
             bitnami/kubectl:latest \
             get deployment nginx-test \
+            --namespace default \
             -o jsonpath='{.spec.template.spec.containers[0].image}'
 
           echo
