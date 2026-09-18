@@ -114,17 +114,14 @@ jobs:
       - name: Helm Upgrade And Install
         run: |
           test -d helm/nginx-test
-          docker run --rm \
+          tar -czf - helm/nginx-test | docker run --rm -i \
             --network host \
             -e KUBECONFIG=/root/.kube/config \
+            -e IMAGE_NAME="$IMAGE_NAME" \
+            -e IMAGE_TAG="$IMAGE_TAG" \
             -v /root/.kube/config:/root/.kube/config:ro \
-            -v "$PWD":/workspace \
-            -w /workspace \
             alpine/helm:3.19.0 \
-            upgrade --install nginx-test ./helm/nginx-test \
-            --namespace default \
-            --set image.repository="$IMAGE_NAME" \
-            --set image.tag="$IMAGE_TAG"
+            sh -c 'mkdir -p /workspace && tar -xzf - -C /workspace && helm upgrade --install nginx-test /workspace/helm/nginx-test --namespace default --set image.repository="$IMAGE_NAME" --set image.tag="$IMAGE_TAG"'
 
       - name: Rollout Status
         run: |
