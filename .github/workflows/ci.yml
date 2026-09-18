@@ -111,32 +111,19 @@ jobs:
           TAG=$(git rev-parse --short HEAD)
           echo "IMAGE_TAG=$TAG" >> $GITHUB_ENV
 
-      # 修改 deployment 镜像
-
-      - name: Update Kubernetes Image
+      - name: Helm Upgrade And Install
         run: |
-          sed -i \
-          "s#image: .*nginx-test:.*#image: $IMAGE_NAME:$IMAGE_TAG#" \
-          k8s/deployment.yaml
-
-      - name: Show Kubernetes YAML
-        run: |
-          cat k8s/deployment.yaml
-
-      # 发布 k8s
-
-      - name: Apply Kubernetes
-        run: |
-          test -d k8s
-          for manifest in k8s/*.yaml; do
-            echo "Applying $manifest"
-            cat "$manifest" | docker run --rm -i \
-              --network host \
-              -e KUBECONFIG=/root/.kube/config \
-              -v /root/.kube/config:/root/.kube/config:ro \
-              bitnami/kubectl:latest \
-              apply -f -
-          done
+          docker run --rm \
+            --network host \
+            -e KUBECONFIG=/root/.kube/config \
+            -v /root/.kube/config:/root/.kube/config:ro \
+            -v "$GITHUB_WORKSPACE":/workspace \
+            -w /workspace \
+            bitnami/helm:latest \
+            upgrade --install nginx-test ./helm/nginx-test \
+            --namespace default \
+            --set image.repository="$IMAGE_NAME" \
+            --set image.tag="$IMAGE_TAG"
 
       - name: Rollout Status
         run: |
@@ -146,20 +133,17 @@ jobs:
             -v /root/.kube/config:/root/.kube/config:ro \
             bitnami/kubectl:latest \
             rollout status \
-            deployment/nginx-test \
+            deployment/nginx-test-nginx-test \
             --timeout=180s
 
       - name: Verify Deployment
         run: |
-          echo "========================"
-          echo "Deployment"
-          echo "========================"
           docker run --rm \
             --network host \
             -e KUBECONFIG=/root/.kube/config \
             -v /root/.kube/config:/root/.kube/config:ro \
             bitnami/kubectl:latest \
-            get deployment nginx-test
+            get deployment nginx-test-nginx-test
 
           echo ""
           echo "========================"
@@ -182,10 +166,9 @@ jobs:
 
           docker run --rm \
             --network host \
-            -e KUBECONFIG=/root/.kube/config \
             -v /root/.kube/config:/root/.kube/config:ro \
             bitnami/kubectl:latest \
-            get deployment nginx-test \
+            get deployment nginx-test-nginx-test \
             -o jsonpath='{.spec.template.spec.containers[0].image}'
 
           echo
