@@ -119,7 +119,7 @@ jobs:
             -v /root/.kube/config:/root/.kube/config:ro \
             -v "$GITHUB_WORKSPACE":/workspace \
             -w /workspace \
-            bitnami/helm:latest \
+            alpine/helm:3.19.0 \
             upgrade --install nginx-test ./helm/nginx-test \
             --namespace default \
             --set image.repository="$IMAGE_NAME" \
