@@ -1,0 +1,29 @@
+replicaCount: 2
+image:
+  repository: harbor.azhuan.ren/sre_uat/nginx-test
+  pullPolicy: IfNotPresent
+  tag: "latest"
+imagePullSecrets:
+  - name: harbor-secret
+
+nameOverride: ""
+fullnameOverride: ""
+
+service:
+  type: ClusterIP
+  port: 80
+ingress:
+  enabled: true
+  className: traefik
+  host: nginx-test.xbb.local
+  path: /
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 200m
+    memory: 128Mi
+nodeSelector: {}
+tolerations: []
+affinity: {}
