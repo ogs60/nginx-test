@@ -165,6 +165,7 @@ jobs:
 
           docker run --rm \
             --network host \
+            -e KUBECONFIG=/root/.kube/config \
             -v /root/.kube/config:/root/.kube/config:ro \
             bitnami/kubectl:latest \
             get deployment nginx-test-nginx-test \
