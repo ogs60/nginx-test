@@ -3,8 +3,6 @@ image:
   repository: harbor.azhuan.ren/sre_uat/nginx-test
   pullPolicy: IfNotPresent
   tag: "latest"
-imagePullSecrets:
-  - name: harbor-secret
 
 nameOverride: ""
 fullnameOverride: ""
