@@ -120,8 +120,9 @@ jobs:
             -e IMAGE_NAME="$IMAGE_NAME" \
             -e IMAGE_TAG="$IMAGE_TAG" \
             -v /root/.kube/config:/root/.kube/config:ro \
+            --entrypoint /bin/sh \
             alpine/helm:3.19.0 \
-            sh -c 'mkdir -p /workspace && tar -xzf - -C /workspace && helm upgrade --install nginx-test /workspace/helm/nginx-test --namespace default --set image.repository="$IMAGE_NAME" --set image.tag="$IMAGE_TAG"'
+            -c 'mkdir -p /workspace && tar -xzf - -C /workspace && helm upgrade --install nginx-test /workspace/helm/nginx-test --namespace default --set image.repository="$IMAGE_NAME" --set image.tag="$IMAGE_TAG"'
 
       - name: Rollout Status
         run: |
